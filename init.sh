@@ -65,7 +65,20 @@ sync_config_with_env() {
   "messages": { "ackReactionScope": "group-mentions", "tts": { "edge": { "voice": "zh-CN-XiaoxiaoNeural" } } },
   "commands": { "native": "auto", "nativeSkills": "auto" },
   "channels": {},
-  "plugins": { "entries": {}, "installs": {} }
+  "plugins": { "entries": {}, "installs": {} },
+    "memory": {
+      "backend": "qmd",
+      "qmd": {
+        "command": "/usr/local/bin/qmd",
+        "paths": [
+          {
+            "path": "/home/node/.openclaw/workspace",
+            "name": "workspace",
+            "pattern": "**/*.md"
+          }
+        ]
+      }
+    }
 }
 EOF
     fi
@@ -124,6 +137,14 @@ def sync():
             
             # 工作区同步：存在则更新，不存在则恢复默认
             config['agents']['defaults']['workspace'] = env.get('WORKSPACE') or '/home/node/.openclaw/workspace'
+            
+            # 同步更新 memory 路径
+            if 'memory' in config and 'qmd' in config['memory']:
+                config['memory']['qmd']['command'] = '/usr/local/bin/qmd'
+                for p in config['memory']['qmd'].get('paths', []):
+                    if p.get('name') == 'workspace':
+                        p['path'] = config['agents']['defaults']['workspace']
+            
             print(f'✅ 模型与工作区同步: {mid}')
 
         # --- 2. 渠道与插件同步 (声明式) ---
@@ -225,8 +246,14 @@ echo "最大 Tokens: ${MAX_TOKENS:-8192}"
 echo "Gateway 端口: $OPENCLAW_GATEWAY_PORT"
 echo "Gateway 绑定: $OPENCLAW_GATEWAY_BIND"
 
+# 安装 bun
+export BUN_INSTALL="/usr/local"
+export PATH="$BUN_INSTALL/bin:$PATH"
+
 # 启动 OpenClaw Gateway（切换到 node 用户）
 echo "=== 启动 OpenClaw Gateway ==="
+
+export DBUS_SESSION_BUS_ADDRESS=/dev/null
 
 # 定义清理函数
 cleanup() {
@@ -242,8 +269,14 @@ cleanup() {
 # 捕获终止信号
 trap cleanup SIGTERM SIGINT SIGQUIT
 
-# 在后台启动 OpenClaw Gateway 作为子进程
-gosu node env HOME=/home/node openclaw gateway --verbose &
+# 启动网关
+gosu node env HOME=/home/node DBUS_SESSION_BUS_ADDRESS=/dev/null \
+    BUN_INSTALL="/usr/local" PATH="/usr/local/bin:$PATH" \
+    openclaw gateway run \
+    --bind "$OPENCLAW_GATEWAY_BIND" \
+    --port "$OPENCLAW_GATEWAY_PORT" \
+    --token "$OPENCLAW_GATEWAY_TOKEN" \
+    --verbose &
 GATEWAY_PID=$!
 
 echo "=== OpenClaw Gateway 已启动 (PID: $GATEWAY_PID) ==="

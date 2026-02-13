@@ -20,14 +20,23 @@ RUN apt-get update \
     python3 \
     socat \
     tini \
+    unzip \
     websockify \
   && rm -rf /var/lib/apt/lists/*
 
 # 更新 npm 到最新版本
 RUN npm install -g npm@latest
 
+# 安装 bun
+RUN curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash
+ENV BUN_INSTALL="/usr/local"
+ENV PATH="$BUN_INSTALL/bin:$PATH"
+
+# 安装 qmd
+RUN bun install -g https://github.com/tobi/qmd
+
 # 安装 OpenClaw 和 OpenCode AI
-RUN npm install -g openclaw@2026.2.9 opencode-ai@latest
+RUN npm install -g openclaw@2026.2.12 opencode-ai@latest
 
 # 安装 Playwright 和 Chromium
 RUN npm install -g playwright && npx playwright install chromium --with-deps
@@ -67,7 +76,7 @@ USER root
 RUN rm -rf /home/node/.openclaw/extensions/feishu
 
 # 确保 extensions 目录权限正确（排除 node_modules 以加快构建速度）
-RUN find /home/node/.openclaw/extensions -type d -name node_modules -prune -o -exec chown node:node {} +
+RUN if [ -d /home/node/.openclaw/extensions ]; then find /home/node/.openclaw/extensions -type d -name node_modules -prune -o -exec chown node:node {} +; fi
 
 # 复制初始化脚本
 COPY ./init.sh /usr/local/bin/init.sh
